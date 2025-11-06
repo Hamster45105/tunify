@@ -6,4 +6,6 @@ The other day, I stumbled across some code I wrote years ago for a shell based g
 
 The original code is in [app.py](/app.py) (no AI used there!)
 
-Play the game at [tunify.hamster45105.dev](tunify.hamster45105.dev). All you need is a Spotify account, everything is pretty self explanatory!
+Play the game at [tunify.hamster45105.dev](https://tunify.hamster45105.dev). All you need is a premium Spotify account, everything is pretty self explanatory!
+
+No data is stored on the server
