@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 Tunify - Test Your Music Knowledge!</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1 class="title">🎵 Tunify</h1>
+            <p class="subtitle">Test your music knowledge with your Spotify playlists!</p>
+            
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">🎧</div>
+                    <h3>Listen & Guess</h3>
+                    <p>Hear snippets of songs and guess the title</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🏆</div>
+                    <h3>Score Points</h3>
+                    <p>Earn more points for faster guesses</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <h3>Track Progress</h3>
+                    <p>See your win rate and statistics</p>
+                </div>
+            </div>
+            
+            <div class="cta">
+                <a href="/login" class="btn btn-primary">
+                    <span class="spotify-icon">►</span>
+                    Connect with Spotify
+                </a>
+            </div>
+            
+            <div class="info">
+                <p>🎮 How to play:</p>
+                <ol>
+                    <li>Connect your Spotify account</li>
+                    <li>Choose a playlist you want to play with</li>
+                    <li>Select your active Spotify device</li>
+                    <li>Listen to song snippets and make your guess!</li>
+                    <li>You get 6 tries with increasingly longer clips</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+    
+</body>
+</html>

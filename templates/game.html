@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 Tunify - Play Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="game-container">
+        <!-- Header with Stats -->
+        <header class="game-header">
+            <h1>🎵 Tunify</h1>
+            <div class="stats-bar">
+                <div class="stat">
+                    <span class="stat-label">Games:</span>
+                    <span class="stat-value" id="games-count">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Wins:</span>
+                    <span class="stat-value" id="wins-count">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Points:</span>
+                    <span class="stat-value" id="points-count">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Win %:</span>
+                    <span class="stat-value" id="win-percentage">0%</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Setup Phase -->
+        <div id="setup-phase" class="phase active">
+            <div class="card">
+                <h2>🎮 Game Setup</h2>
+                
+                <!-- Playlist Selection -->
+                <div class="setup-section">
+                    <h3>1. Choose a Playlist</h3>
+                    <div class="input-group">
+                        <input type="text" id="playlist-link" placeholder="Paste Spotify playlist link here..." />
+                        <button class="btn btn-primary" onclick="loadPlaylist()">Load Playlist</button>
+                    </div>
+                    <div id="playlist-info" class="playlist-info hidden">
+                        <img id="playlist-image" src="" alt="Playlist cover" />
+                        <div>
+                            <h4 id="playlist-name"></h4>
+                            <p id="playlist-song-count"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Device Selection -->
+                <div class="setup-section" id="device-section" style="display: none;">
+                    <h3>2. Select Your Device</h3>
+                    <p class="hint">⚠️ Make sure you can't see the Spotify app screen during the game!</p>
+                    <div id="device-list" class="device-list"></div>
+                    <button class="btn btn-secondary" onclick="refreshDevices()">🔄 Refresh Devices</button>
+                </div>
+                
+                <!-- Start Button -->
+                <div class="setup-section" id="start-section" style="display: none;">
+                    <button class="btn btn-success btn-large" onclick="startGame()">🎮 Start Game!</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Phase -->
+        <div id="game-phase" class="phase">
+            <div class="card">
+                <div class="game-info">
+                    <h2 id="guess-counter">Guess 1/6</h2>
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                </div>
+                
+                <div class="game-actions">
+                    <button class="btn btn-primary btn-large" id="play-btn" onclick="playSong()">
+                        ▶️ Play Song
+                    </button>
+                    <button class="btn btn-secondary" id="repeat-btn" onclick="repeatSong()" style="display: none;">
+                        🔁 Play Again
+                    </button>
+                </div>
+                
+                <div id="search-section" class="search-section" style="display: none;">
+                    <h3>What song is it?</h3>
+                    <div class="input-group">
+                        <input type="text" id="search-input" placeholder="Search for the song..." 
+                               onkeyup="handleSearchKeyup(event)" />
+                        <button class="btn btn-primary" onclick="searchSongs()">🔍 Search</button>
+                    </div>
+                    
+                    <div id="search-results" class="search-results"></div>
+                    
+                    <div class="game-controls">
+                        <button class="btn btn-warning" onclick="skipSong()">⏭️ Skip Song</button>
+                    </div>
+                </div>
+                
+                <div id="result-section" class="result-section" style="display: none;">
+                    <div id="result-message"></div>
+                    <div class="game-controls">
+                        <button class="btn btn-success" onclick="playAgain()">🎮 Next Song</button>
+                        <button class="btn btn-secondary" onclick="endGame()">🏁 Finish</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Phase -->
+        <div id="results-phase" class="phase">
+            <div class="card results-card">
+                <h2>🏆 Game Results</h2>
+                <div class="results-stats">
+                    <div class="result-stat">
+                        <div class="result-value" id="final-games">0</div>
+                        <div class="result-label">Games Played</div>
+                    </div>
+                    <div class="result-stat">
+                        <div class="result-value" id="final-wins">0</div>
+                        <div class="result-label">Wins</div>
+                    </div>
+                    <div class="result-stat">
+                        <div class="result-value" id="final-points">0</div>
+                        <div class="result-label">Points</div>
+                    </div>
+                    <div class="result-stat">
+                        <div class="result-value" id="final-win-percentage">0%</div>
+                        <div class="result-label">Win Rate</div>
+                    </div>
+                    <div class="result-stat">
+                        <div class="result-value" id="final-points-percentage">0%</div>
+                        <div class="result-label">Points Rate</div>
+                    </div>
+                </div>
+                <div class="game-controls">
+                    <button class="btn btn-primary btn-large" onclick="location.reload()">🎮 Play Again</button>
+                    <button class="btn btn-secondary" onclick="location.href='/'">🏠 Home</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+    
+    <script src="{{ url_for('static', filename='game.js') }}"></script>
+</body>
+</html>
