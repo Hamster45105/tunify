@@ -1,8 +1,10 @@
 // Game State
-let selectedDevice = null;
+let player = null;
+let deviceId = null;
 let currentGuess = 1;
 let currentDuration = 3;
 let isPlaying = false;
+let playbackTimeout = null;
 
 const guessDurations = {
     1: 3,
@@ -12,6 +14,73 @@ const guessDurations = {
     5: 15,
     6: 20
 };
+
+// Initialize Spotify Web Playback SDK
+window.onSpotifyWebPlaybackSDKReady = () => {
+    console.log('Spotify Web Playback SDK is ready');
+    initializePlayer();
+};
+
+async function initializePlayer() {
+    try {
+        player = new Spotify.Player({
+            name: 'Tunify Web Player',
+            getOAuthToken: async cb => { 
+                // This callback is called whenever the SDK needs a token
+                // It will automatically refresh when needed
+                try {
+                    const tokenResponse = await apiCall('/api/token');
+                    cb(tokenResponse.access_token);
+                } catch (error) {
+                    console.error('Error getting token:', error);
+                }
+            },
+            volume: 0.5
+        });
+
+        // Error handling
+        player.addListener('initialization_error', ({ message }) => { 
+            console.error('Initialization error:', message); 
+        });
+        player.addListener('authentication_error', ({ message }) => { 
+            console.error('Authentication error:', message);
+            // Don't show alert - SDK will retry with fresh token
+        });
+        player.addListener('account_error', ({ message }) => { 
+            console.error('Account error:', message);
+            alert('Spotify Premium is required to play songs. Please upgrade your account.');
+        });
+        player.addListener('playback_error', ({ message }) => { 
+            console.error('Playback error:', message); 
+        });
+
+        // Ready
+        player.addListener('ready', ({ device_id }) => {
+            console.log('Ready with Device ID', device_id);
+            deviceId = device_id;
+        });
+
+        // Not Ready
+        player.addListener('not_ready', ({ device_id }) => {
+            console.log('Device ID has gone offline', device_id);
+        });
+
+        // Player state changed
+        player.addListener('player_state_changed', (state) => {
+            if (!state) return;
+            console.log('Player state:', state);
+        });
+
+        // Connect to the player
+        const connected = await player.connect();
+        if (connected) {
+            console.log('Successfully connected to Spotify!');
+        }
+    } catch (error) {
+        console.error('Error initializing player:', error);
+        alert('Error connecting to Spotify. Please refresh the page.');
+    }
+}
 
 // Utility Functions
 function showLoading() {
@@ -81,9 +150,8 @@ async function loadPlaylist() {
             
             playlistInfo.classList.remove('hidden');
             
-            // Show device section
-            document.getElementById('device-section').style.display = 'block';
-            await refreshDevices();
+            // Show start button directly (no device selection needed)
+            document.getElementById('start-section').style.display = 'block';
         } else {
             alert('Failed to load playlist: ' + result.error);
         }
@@ -94,62 +162,19 @@ async function loadPlaylist() {
     }
 }
 
-// Device Functions
-async function refreshDevices() {
-    showLoading();
-    
-    try {
-        const result = await apiCall('/api/devices');
-        const deviceList = document.getElementById('device-list');
-        deviceList.innerHTML = '';
-        
-        if (result.devices.length === 0) {
-            deviceList.innerHTML = '<p class="hint">⚠️ No active devices found. Please open Spotify on a device and try again.</p>';
-        } else {
-            result.devices.forEach(device => {
-                const deviceItem = document.createElement('div');
-                deviceItem.className = 'device-item';
-                deviceItem.onclick = () => selectDevice(device.id, deviceItem);
-                
-                deviceItem.innerHTML = `
-                    <div class="device-name">${device.name}</div>
-                    <div class="device-type">${device.type}${device.is_active ? ' (Active)' : ''}</div>
-                `;
-                
-                deviceList.appendChild(deviceItem);
-            });
-        }
-    } catch (error) {
-        alert('Error loading devices: ' + error.message);
-    } finally {
-        hideLoading();
-    }
-}
-
-function selectDevice(deviceId, element) {
-    selectedDevice = deviceId;
-    
-    // Update UI
-    document.querySelectorAll('.device-item').forEach(item => {
-        item.classList.remove('selected');
-    });
-    element.classList.add('selected');
-    
-    // Show start button
-    document.getElementById('start-section').style.display = 'block';
-}
-
 // Game Functions
 async function startGame() {
-    if (!selectedDevice) {
-        alert('Please select a device first!');
+    if (!deviceId) {
+        alert('Player not ready yet. Please wait a moment and try again.');
         return;
     }
     
     showLoading();
     
     try {
-        await apiCall('/api/new-song', 'POST');
+        const result = await apiCall('/api/new-song', 'POST');
+        // Store the song URI for playback
+        sessionStorage.setItem('currentSongUri', result.uri);
         currentGuess = 1;
         updateGuessCounter();
         showPhase('game');
@@ -167,7 +192,7 @@ function updateGuessCounter() {
 }
 
 async function playSong() {
-    if (!selectedDevice || isPlaying) return;
+    if (!deviceId || isPlaying) return;
     
     isPlaying = true;
     currentDuration = guessDurations[currentGuess];
@@ -177,14 +202,17 @@ async function playSong() {
     playBtn.textContent = `🎵 Playing (${currentDuration}s)...`;
     
     try {
-        await apiCall('/api/play', 'POST', { 
-            device_id: selectedDevice,
-            duration: currentDuration
-        });
+        const songUri = await getCurrentSongUri();
         
-        // Wait for duration then pause
-        setTimeout(async () => {
-            await apiCall('/api/pause', 'POST');
+        // Ask backend to start playback on the SDK device (keeps logic in Python)
+        const result = await apiCall('/api/play', 'POST', { device_id: deviceId, duration: currentDuration });
+        if (!result || result.error) {
+            throw new Error(result?.error || 'Failed to start playback');
+        }
+        
+        // Pause after specified duration
+        playbackTimeout = setTimeout(() => {
+            player.pause();
             
             playBtn.style.display = 'none';
             document.getElementById('repeat-btn').style.display = 'inline-block';
@@ -194,6 +222,7 @@ async function playSong() {
         }, currentDuration * 1000);
         
     } catch (error) {
+        console.error('Error playing song:', error);
         alert('Error playing song: ' + error.message);
         playBtn.disabled = false;
         playBtn.textContent = '▶️ Play Song';
@@ -209,22 +238,34 @@ async function repeatSong() {
     isPlaying = true;
     
     try {
-        await apiCall('/api/play', 'POST', { 
-            device_id: selectedDevice,
-            duration: currentDuration
-        });
+        // Ask backend to (re)start playback on the SDK device from beginning
+        const result = await apiCall('/api/play', 'POST', { device_id: deviceId, duration: currentDuration });
+        if (!result || result.error) {
+            throw new Error(result?.error || 'Failed to start playback');
+        }
         
-        setTimeout(async () => {
-            await apiCall('/api/pause', 'POST');
+        // Pause after duration
+        playbackTimeout = setTimeout(() => {
+            player.pause();
             repeatBtn.disabled = false;
             isPlaying = false;
         }, currentDuration * 1000);
         
     } catch (error) {
+        console.error('Error playing song:', error);
         alert('Error playing song: ' + error.message);
         repeatBtn.disabled = false;
         isPlaying = false;
     }
+}
+
+// Note: Web Playback SDK handles its own token via getOAuthToken callback.
+
+// Helper to get current song URI from backend
+async function getCurrentSongUri() {
+    // We need to add an endpoint that returns the current song URI
+    // For now, we'll store it in session storage when a new song is picked
+    return sessionStorage.getItem('currentSongUri');
 }
 
 function handleSearchKeyup(event) {
@@ -368,7 +409,10 @@ async function playAgain() {
     
     try {
         await apiCall('/api/end-game', 'POST');
-        await apiCall('/api/new-song', 'POST');
+        const result = await apiCall('/api/new-song', 'POST');
+        
+        // Store the new song URI
+        sessionStorage.setItem('currentSongUri', result.uri);
         
         // Reset game state
         currentGuess = 1;

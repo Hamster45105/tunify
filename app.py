@@ -4,18 +4,29 @@ from spotipy.oauth2 import SpotifyOAuth
 import random
 import os
 from dotenv import load_dotenv
+from spotipy import exceptions as spotipy_exceptions
 import secrets
 
 load_dotenv()
 
 app = Flask(__name__)
+# SECRET_KEY should be provided via environment in production; fallback is for local dev only
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(16))
 
-# Spotify OAuth configuration
-SCOPE = ['user-read-playback-state', 'user-modify-playback-state',
-         'playlist-read-private', 'playlist-read-collaborative',
-         'user-read-currently-playing']
+# Security-related cookie settings
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=(os.getenv('FLASK_ENV') == 'production' or os.getenv('SESSION_COOKIE_SECURE') == '1')
+)
 
+# Spotify OAuth configuration
+# Minimal scopes for Web Playback SDK + Playlist access
+SCOPE = ['streaming',
+         'user-read-email',
+         'playlist-read-private',
+         'playlist-read-collaborative']
+    
 def get_spotify_client():
     """Get or create Spotify client for the current session"""
     cache_handler = spotipy.cache_handler.FlaskSessionCacheHandler(session)
@@ -85,24 +96,16 @@ def game():
 
     return render_template('game.html')
 
-@app.route('/api/devices')
-def get_devices():
-    """Get available Spotify devices"""
-    sp = get_spotify_client()
-    if not sp:
+@app.route('/api/token')
+def get_token():
+    """Get access token for Web Playback SDK"""
+    cache_handler = spotipy.cache_handler.FlaskSessionCacheHandler(session)
+    token_info = cache_handler.get_cached_token()
+    
+    if not token_info:
         return jsonify({'error': 'Not authenticated'}), 401
-
-    try:
-        devices = sp.devices()
-        device_list = [{
-            'id': device['id'],
-            'name': device['name'],
-            'type': device['type'],
-            'is_active': device['is_active']
-        } for device in devices['devices']]
-        return jsonify({'devices': device_list})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    
+    return jsonify({'access_token': token_info['access_token']})
 
 @app.route('/api/playlist', methods=['POST'])
 def load_playlist():
@@ -112,7 +115,11 @@ def load_playlist():
         return jsonify({'error': 'Not authenticated'}), 401
 
     data = request.json
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid JSON body'}), 400
     playlist_link = data.get('playlist_link')
+    if not playlist_link or not isinstance(playlist_link, str):
+        return jsonify({'error': 'playlist_link is required'}), 400
 
     try:
         playlist_details = sp.playlist(playlist_link)
@@ -125,8 +132,10 @@ def load_playlist():
             'song_count': playlist_details['tracks']['total'],
             'image': playlist_details['images'][0]['url'] if playlist_details['images'] else None
         })
-    except Exception as e:
-        return jsonify({'error': 'Invalid playlist link'}), 400
+    except spotipy_exceptions.SpotifyException as e:
+        return jsonify({'error': f'Invalid playlist link or access denied: {e.msg}'}), 400
+    except Exception:
+        return jsonify({'error': 'Unexpected server error'}), 500
 
 @app.route('/api/new-song', methods=['POST'])
 def new_song():
@@ -156,8 +165,11 @@ def new_song():
             'id': track['id']
         }
         session['current_guess'] = 1
-
-        return jsonify({'success': True})
+        
+        return jsonify({
+            'success': True,
+            'uri': track['uri']  # Return URI for Web Playback SDK
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -169,22 +181,28 @@ def play_song():
         return jsonify({'error': 'Not authenticated'}), 401
 
     data = request.json
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid JSON body'}), 400
     device_id = data.get('device_id')
     duration = data.get('duration', 3)
+    if not device_id:
+        return jsonify({'error': 'device_id is required'}), 400
 
     if 'current_song' not in session:
         return jsonify({'error': 'No song selected'}), 400
 
     try:
         song_uri = session['current_song']['uri']
-        sp.start_playback(device_id=device_id, uris=[song_uri])
+        sp.start_playback(device_id=device_id, uris=[song_uri], position_ms=0)
 
         return jsonify({
             'success': True,
             'duration': duration
         })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except spotipy_exceptions.SpotifyException as e:
+        return jsonify({'error': f'Spotify API error: {e.msg}'}), 502
+    except Exception:
+        return jsonify({'error': 'Unexpected server error'}), 500
 
 @app.route('/api/pause', methods=['POST'])
 def pause_song():
@@ -196,8 +214,10 @@ def pause_song():
     try:
         sp.pause_playback()
         return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except spotipy_exceptions.SpotifyException as e:
+        return jsonify({'error': f'Spotify API error: {e.msg}'}), 502
+    except Exception:
+        return jsonify({'error': 'Unexpected server error'}), 500
 
 @app.route('/api/search', methods=['POST'])
 def search_songs():
@@ -207,8 +227,12 @@ def search_songs():
         return jsonify({'error': 'Not authenticated'}), 401
 
     data = request.json
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid JSON body'}), 400
     query = data.get('query')
     offset = data.get('offset', 0)
+    if not query:
+        return jsonify({'error': 'query is required'}), 400
 
     try:
         results = sp.search(query, limit=10, offset=offset)
@@ -219,8 +243,10 @@ def search_songs():
         } for track in results['tracks']['items']]
 
         return jsonify({'songs': songs})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except spotipy_exceptions.SpotifyException as e:
+        return jsonify({'error': f'Spotify API error: {e.msg}'}), 502
+    except Exception:
+        return jsonify({'error': 'Unexpected server error'}), 500
 
 @app.route('/api/guess', methods=['POST'])
 def make_guess():
@@ -230,6 +256,8 @@ def make_guess():
         return jsonify({'error': 'Not authenticated'}), 401
 
     data = request.json
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid JSON body'}), 400
     guessed_name = data.get('name')
     guessed_artist = data.get('artist')
 
@@ -301,5 +329,4 @@ def end_game():
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
 
-# Export app for Vercel
-app = app
+# The Flask app instance is named 'app' for deployment platforms that auto-detect it

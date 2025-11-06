@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🎵 Tunify - Play Game</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
 </head>
 <body>
     <div class="game-container">
@@ -38,7 +39,7 @@
                 
                 <!-- Playlist Selection -->
                 <div class="setup-section">
-                    <h3>1. Choose a Playlist</h3>
+                    <h3>Choose a Playlist</h3>
                     <div class="input-group">
                         <input type="text" id="playlist-link" placeholder="Paste Spotify playlist link here..." />
                         <button class="btn btn-primary" onclick="loadPlaylist()">Load Playlist</button>
@@ -50,14 +51,6 @@
                             <p id="playlist-song-count"></p>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Device Selection -->
-                <div class="setup-section" id="device-section" style="display: none;">
-                    <h3>2. Select Your Device</h3>
-                    <p class="hint">⚠️ Make sure you can't see the Spotify app screen during the game!</p>
-                    <div id="device-list" class="device-list"></div>
-                    <button class="btn btn-secondary" onclick="refreshDevices()">🔄 Refresh Devices</button>
                 </div>
                 
                 <!-- Start Button -->
